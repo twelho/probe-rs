@@ -12,6 +12,7 @@ use constants::{commands, JTagFrequencyToDivider, Mode, Status, SwdFrequencyToDe
 use scroll::{Pread, BE, LE};
 use thiserror::Error;
 use usb_interface::TIMEOUT;
+use num_traits::FromPrimitive;
 
 #[derive(Debug)]
 pub struct STLink {
@@ -130,7 +131,17 @@ impl DebugProbe for STLink {
             &mut buf,
             TIMEOUT,
         )?;
-        Self::check_status(&buf)?;
+        let result = Self::check_status(&buf);
+
+        match result {
+            Err(StlinkError::CommandFailed(Status::JtagGetIdcodeError)) => {
+                self.target_reset_assert()?;
+                self.attach()?;
+                self.target_reset_deassert()?;
+                Ok(())
+            }
+            result => result,
+        }?;
 
         log::debug!("Successfully initialized SWD.");
 
@@ -157,7 +168,6 @@ impl DebugProbe for STLink {
         self.enter_idle()
     }
 
-    /// Asserts the nRESET pin.
     fn target_reset(&mut self) -> Result<(), DebugProbeError> {
         let mut buf = [0; 2];
         self.device.write(
@@ -171,7 +181,8 @@ impl DebugProbe for STLink {
             TIMEOUT,
         )?;
 
-        Self::check_status(&buf)
+        Self::check_status(&buf)?;
+        Ok(())
     }
 
     fn select_protocol(&mut self, protocol: WireProtocol) -> Result<(), DebugProbeError> {
@@ -471,6 +482,42 @@ impl STLink {
         self.get_target_voltage().map(|_| ())
     }
 
+    /// Asserts the nRESET pin.
+    fn target_reset_assert(&mut self) -> Result<(), DebugProbeError> {
+        let mut buf = [0; 2];
+        self.device.write(
+            vec![
+                commands::JTAG_COMMAND,
+                commands::JTAG_DRIVE_NRST,
+                commands::JTAG_DRIVE_NRST_LOW,
+            ],
+            &[],
+            &mut buf,
+            TIMEOUT,
+        )?;
+
+        Self::check_status(&buf)?;
+        Ok(())
+    }
+
+    /// Deasserts the nRESET pin.
+    fn target_reset_deassert(&mut self) -> Result<(), DebugProbeError> {
+        let mut buf = [0; 2];
+        self.device.write(
+            vec![
+                commands::JTAG_COMMAND,
+                commands::JTAG_DRIVE_NRST,
+                commands::JTAG_DRIVE_NRST_HIGH,
+            ],
+            &[],
+            &mut buf,
+            TIMEOUT,
+        )?;
+
+        Self::check_status(&buf)?;
+        Ok(())
+    }
+
     /// sets the SWD frequency.
     pub fn set_swd_frequency(
         &mut self,
@@ -487,7 +534,8 @@ impl STLink {
             &mut buf,
             TIMEOUT,
         )?;
-        Self::check_status(&buf)
+        Self::check_status(&buf)?;
+        Ok(())
     }
 
     /// Sets the JTAG frequency.
@@ -506,7 +554,8 @@ impl STLink {
             &mut buf,
             TIMEOUT,
         )?;
-        Self::check_status(&buf)
+        Self::check_status(&buf)?;
+        Ok(())
     }
 
     /// Sets the communication frequency (V3 only)
@@ -527,7 +576,8 @@ impl STLink {
 
         let mut buf = [0; 8];
         self.device.write(command, &[], &mut buf, TIMEOUT)?;
-        Self::check_status(&buf)
+        Self::check_status(&buf)?;
+        Ok(())
     }
 
     /// Returns the current and available communication frequencies (V3 only)
@@ -577,7 +627,8 @@ impl STLink {
                 &mut buf,
                 TIMEOUT,
             )?;
-            Self::check_status(&buf)
+            Self::check_status(&buf)?;
+            Ok(())
         }
     }
 
@@ -593,7 +644,8 @@ impl STLink {
                 &mut buf,
                 TIMEOUT,
             )?;
-            Self::check_status(&buf)
+            Self::check_status(&buf)?;
+            Ok(())
         }
     }
 
@@ -601,13 +653,17 @@ impl STLink {
     /// Returns an error if the status is not `Status::JtagOk`.
     /// Returns Ok(()) otherwise.
     /// This can be called on any status returned from the attached target.
-    fn check_status(status: &[u8]) -> Result<(), DebugProbeError> {
-        let status = Status::from(status[0]);
-        if status != Status::JtagOk {
-            log::warn!("check_status failed: {:?}", status);
-            Err(StlinkError::CommandFailed(status).into())
+    fn check_status(status: &[u8]) -> Result<(), StlinkError> {
+        log::trace!("check_status({:?})", status);
+        if let Some(status) = Status::from_u8(status[0]) {
+            if status != Status::JtagOk {
+                log::warn!("check_status failed: {:?}", status);
+                Err(StlinkError::CommandFailed(status).into())
+            } else {
+                Ok(())
+            }
         } else {
-            Ok(())
+            Err(StlinkError::CommandFailed(Status::Unknown))
         }
     }
 }
