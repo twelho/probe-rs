@@ -9,7 +9,6 @@ use super::{
 };
 use crate::Memory;
 use constants::{commands, JTagFrequencyToDivider, Mode, Status, SwdFrequencyToDelayCount};
-use num_traits::FromPrimitive;
 use scroll::{Pread, BE, LE};
 use thiserror::Error;
 use usb_interface::TIMEOUT;
@@ -640,16 +639,12 @@ impl STLink {
     /// Returns Ok(()) otherwise.
     /// This can be called on any status returned from the attached target.
     fn check_status(status: &[u8]) -> Result<(), StlinkError> {
-        log::trace!("check_status({:?})", status);
-        if let Some(status) = Status::from_u8(status[0]) {
-            if status != Status::JtagOk {
-                log::warn!("check_status failed: {:?}", status);
-                Err(StlinkError::CommandFailed(status).into())
-            } else {
-                Ok(())
-            }
+        let status = Status::from(status[0]);
+        if status != Status::JtagOk {
+            log::warn!("check_status failed: {:?}", status);
+            Err(StlinkError::CommandFailed(status))
         } else {
-            Err(StlinkError::CommandFailed(Status::Unknown))
+            Ok(())
         }
     }
 }
