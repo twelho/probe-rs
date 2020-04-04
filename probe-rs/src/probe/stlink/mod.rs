@@ -9,10 +9,10 @@ use super::{
 };
 use crate::Memory;
 use constants::{commands, JTagFrequencyToDivider, Mode, Status, SwdFrequencyToDelayCount};
+use num_traits::FromPrimitive;
 use scroll::{Pread, BE, LE};
 use thiserror::Error;
 use usb_interface::TIMEOUT;
-use num_traits::FromPrimitive;
 
 #[derive(Debug)]
 pub struct STLink {
@@ -139,7 +139,7 @@ impl DebugProbe for STLink {
             Err(StlinkError::CommandFailed(Status::JtagGetIdcodeError))
             | Err(StlinkError::CommandFailed(Status::JtagNoDeviceConnected)) => {
                 self.target_reset_assert()?;
-                
+
                 let mut buf = [0; 2];
                 self.device.write(
                     vec![commands::JTAG_COMMAND, commands::JTAG_ENTER2, param, 0],
