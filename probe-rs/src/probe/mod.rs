@@ -212,7 +212,7 @@ impl Probe {
     /// Attach to the chip.
     ///
     /// This runs all the necessary protocol init routines.
-    /// 
+    ///
     /// If this doesn't work, you might want to try `attach_under_reset`
     pub fn attach(mut self, target: impl Into<TargetSelector>) -> Result<Session, Error> {
         self.inner.attach()?;
@@ -226,7 +226,10 @@ impl Probe {
     /// This asserts the reset pin via the probe, plays the protocol init routines and deasserts the pin.
     /// This is necessary if the chip is not responding to the SWD reset sequence.
     /// For example this can happen if the chip has the SWDIO pin remapped.
-    pub fn attach_under_reset(mut self, target: impl Into<TargetSelector>) -> Result<Session, Error> {
+    pub fn attach_under_reset(
+        mut self,
+        target: impl Into<TargetSelector>,
+    ) -> Result<Session, Error> {
         self.inner.target_reset_assert()?;
         self.inner.attach()?;
         self.inner.target_reset_deassert()?;
