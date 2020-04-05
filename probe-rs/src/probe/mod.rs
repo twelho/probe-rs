@@ -76,8 +76,6 @@ pub enum DebugProbeError {
     Attached,
     #[error("Some functionality was not implemented yet")]
     NotImplemented(&'static str),
-    #[error("Some functionality was not implemented yet")]
-    AttachFailed(&'static str),
 }
 
 /// The Probe struct is a generic wrapper over the different
