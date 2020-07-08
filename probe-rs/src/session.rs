@@ -184,6 +184,14 @@ impl Session {
             ArchitectureInterfaceState::Riscv(_) => Architecture::Riscv,
         }
     }
+
+    pub fn probe(&self) -> &Probe {
+        &self.probe
+    }
+
+    pub fn probe_mut(&mut self) -> &Probe {
+        &mut self.probe
+    }
 }
 
 fn try_arm_autodetect(

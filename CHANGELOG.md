@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Made the `Probe` object accessible on a session to be able to execute function such as `Probe::target_reset()` once the session has already taken ownership of the `Probe`.
+
 ### Changed
 
 ### Fixed
