@@ -9,13 +9,13 @@ use super::{
     ApAddress, DapAccess, DpAddress, PortType, RawDapAccess, SwoAccess, SwoConfig,
 };
 use crate::{
-    architecture::arm::ap::DataSize, CommunicationInterface, DebugProbe, DebugProbeError,
-    Error as ProbeRsError, Memory, Probe,
+    architecture::arm::ap::DataSize, config::DebugSequence, CommunicationInterface, DebugProbe,
+    DebugProbeError, Error as ProbeRsError, Memory, Probe,
 };
 use anyhow::anyhow;
 use jep106::JEP106Code;
 
-use std::{collections::HashMap, fmt::Debug, time::Duration};
+use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq)]
 pub enum DapError {
@@ -44,7 +44,7 @@ pub trait Register: Clone + From<u32> + Into<u32> + Sized + Debug {
     const NAME: &'static str;
 }
 
-pub trait ArmProbeInterface: DapAccess + SwdSequence + SwoAccess + Debug + Send {
+pub trait ArmProbeInterface: DapAccess + SwdSequence + SwoAccess + Send {
     fn memory_interface(&mut self, access_port: MemoryAp) -> Result<Memory<'_>, ProbeRsError>;
 
     fn ap_information(&mut self, access_port: GenericAp) -> Result<&ApInformation, ProbeRsError>;
@@ -89,21 +89,23 @@ pub trait ArmDebugState {}
 pub struct Uninitialized {
     /// Specify if overrun detect should be enabled when the probe is initialized.
     pub(crate) use_overrun_detect: bool,
+    sequence: Arc<dyn ArmDebugSequence>,
 }
 
-#[derive(Debug)]
 pub struct Initialized {
     current_dp: Option<DpAddress>,
     dps: HashMap<DpAddress, DpState>,
     use_overrun_detect: bool,
+    sequence: Arc<dyn ArmDebugSequence>,
 }
 
 impl Initialized {
-    pub fn new(use_overrun_detect: bool) -> Self {
+    pub fn new(sequence: Arc<dyn ArmDebugSequence>, use_overrun_detect: bool) -> Self {
         Self {
             current_dp: None,
             dps: HashMap::new(),
             use_overrun_detect,
+            sequence,
         }
     }
 }
@@ -288,8 +290,15 @@ impl<S: ArmDebugState> SwdSequence for ArmCommunicationInterface<S> {
 }
 
 impl<'interface> ArmCommunicationInterface<Uninitialized> {
-    pub(crate) fn new(probe: Box<dyn DapProbe>, use_overrun_detect: bool) -> Self {
-        let state = Uninitialized { use_overrun_detect };
+    pub(crate) fn new(
+        probe: Box<dyn DapProbe>,
+        sequence: Arc<dyn ArmDebugSequence>,
+        use_overrun_detect: bool,
+    ) -> Self {
+        let state = Uninitialized {
+            use_overrun_detect,
+            sequence,
+        };
 
         Self { probe, state }
     }
@@ -337,7 +346,7 @@ impl<'interface> ArmCommunicationInterface<Initialized> {
     ) -> Result<Self, (ArmCommunicationInterface<Uninitialized>, DebugProbeError)> {
         let mut initialized_interface = ArmCommunicationInterface {
             probe: interface.probe,
-            state: Initialized::new(use_overrun_detect),
+            state: Initialized::new(interface.state.sequence, use_overrun_detect),
         };
 
         Ok(initialized_interface)
@@ -453,6 +462,17 @@ impl<'interface> ArmCommunicationInterface<Initialized> {
 
         if !self.state.dps.contains_key(&dp) {
             self.init_dp(dp)?;
+            // TODO: Select the right AP here.
+            // TODO: Fix unwrap.
+            self.state
+                .sequence
+                .debug_port_start(
+                    &mut self
+                        .memory_interface(MemoryAp::new(ApAddress { dp, ap: 0 }))
+                        .unwrap(),
+                    dp,
+                )
+                .unwrap();
         }
 
         Ok(())
