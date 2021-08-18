@@ -244,15 +244,7 @@ impl Request for TransferBlockRequest {
 
         let mut data = Vec::with_capacity(transfer_count as usize);
 
-        let num_transfers = (buffer.len() - 3) / 4;
-
-        log::debug!(
-            "Expected {} responses, got {} responses with data..",
-            transfer_count,
-            num_transfers
-        );
-
-        for data_offset in 0..num_transfers {
+        for data_offset in 0..transfer_count as usize {
             data.push(
                 buffer
                     .pread_with(3 + data_offset * 4, LE)
